@@ -8,12 +8,18 @@
 #include <string.h>
 #include <signal.h>
 
+#ifndef REPOURL
+#define REPOURL      "[Source code: https://github.com/SalvatoreBia/TypiT.git]"
+#endif
+
 #define LISTPATH     "words.txt"
 #define WORDCHUNK    45
 #define TESTDURATION 30
 #define TESTLINELEN  15
 #define LINEMAXLEN   50
 #define UITITLE      "<<< TypiT >>>"
+#define UISTOP       "[Ctrl+C to quit]"
+#define UITESTRESET  "[Tab to reset]"
 
 // ==================== GLOBAL VARIABLES ===================
 
@@ -307,8 +313,8 @@ void clear_countdown(WINDOW *win)
 
 void handle_resize(ui_t *ui, player_t *p)
 {	
-	const int LINEY = 8;
-	const int LINEX = 8;
+	static const int LINEY = 8;
+	static const int LINEX = 8;
 
 	int row, col;
 	getmaxyx(stdscr, row, col);
@@ -333,6 +339,13 @@ void handle_resize(ui_t *ui, player_t *p)
 	int use_next = 0;
 	if (start + 1 == (WORDCHUNK / TESTLINELEN)) use_next = 1;
 	print_test_line(ui->win, p, start+1, LINEY+1, LINEX, 0, use_next);
+
+	// print link and shortcuts on screen
+	int tab_start = (int) (strlen(UISTOP) + strlen(UITESTRESET));
+	int ctrlc_start = tab_start - ((int) strlen(UISTOP));
+	mvwprintw(ui->win, ui->y-2, ui->x-5 - tab_start, UITESTRESET);
+	mvwprintw(ui->win, ui->y-2, ui->x-5 - ctrlc_start, UISTOP);
+	mvwprintw(ui->win, ui->y-2, 2, REPOURL);
 
 	// move cursor to the current word index
 	wmove(ui->win, LINEY, LINEX + cursor_x);
@@ -411,9 +424,11 @@ int main()
 
 	while (running)
 	{
+		
 	    int ch = wgetch(main_ui.win);
 	    switch (ch)
 	    {
+	    
 	        case KEY_RESIZE:
 	            handle_resize(&main_ui, &p);
 	            break;
