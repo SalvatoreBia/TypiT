@@ -12,9 +12,15 @@
 #define REPOURL      "[Source code: https://github.com/SalvatoreBia/TypiT.git]"
 #endif
 
-#define LISTPATH     "words.txt"
-#define WORDCHUNK    45
+#ifndef TESTDURATION
 #define TESTDURATION 30
+#endif
+
+#ifndef LISTPATH
+#define LISTPATH     "words.txt"
+#endif
+
+#define WORDCHUNK    45
 #define TESTLINELEN  15
 #define LINEMAXLEN   50
 #define UITITLE      "<<< TypiT >>>"
@@ -26,7 +32,10 @@
 char **words_g;
 int  words_len_g;
 
-static volatile int running = 1;
+static volatile int running_g = 1;
+
+static int countdown_active_g = 0;
+static int test_ended_g     = 1;
 
 // ==================== DATA STRUCTURES ====================
 
@@ -40,6 +49,8 @@ typedef struct
 {
 	int wpm;
 	float accuracy;
+	int total_key_pressed;
+	int correct_key_pressed;
 }stats_t;
 
 typedef struct
@@ -54,12 +65,14 @@ typedef struct
 
 // ==================== UTILITIES ==========================
 
+/* handler for ctrl+C shortcut (quits the application) */
 void int_handler(int sig)
 {
 	endwin();
 	exit(42);
 }
 
+/* returns the number of lines in a file */
 int fcount_lines(const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -76,6 +89,7 @@ int fcount_lines(const char *filename)
     return count;
 }
 
+/* initialize the global list of words for the typer */
 void init_words_g(void)
 {
     int lines = fcount_lines(LISTPATH);
@@ -118,6 +132,7 @@ void init_words_g(void)
     fclose(file);
 }
 
+/* returns a list of words randomly chosen from the global list of words */
 char **get_chunk(void)
 {
     char **chunk = (char **)malloc(WORDCHUNK * sizeof(char *));
@@ -144,6 +159,7 @@ char **get_chunk(void)
     return chunk;
 }
 
+/* frees a list of words */
 void free_chunk(char **list)
 {
 	if (!list) return;
@@ -154,12 +170,25 @@ void free_chunk(char **list)
 	free(list);
 }
 
-// ==================== THREADS ============================
-
-// coming soon...
-
 // ==================== TYPING FUNCTIONS ===================
 
+/* prints a line of the typing test, containing the words to type.
+ * it takes as input:
+ * win  -> the ncurses window
+ * p    -> the player
+ * skip -> the index of the row to get from either p->curr or p->next
+ *         (skip needs to be multiplied by TESTLINELEN in order to 
+ *          get the actual index of the first word to take from them)
+ * y, x -> the index of the window where to print the string
+ * needs_coloring -> flag that indicates if the string needs to
+ *                   be splitted and colored on the left half
+ * use_next -> flag that indicates if p->next should be used as word list
+ *
+ * it returns an integer: if needs_coloring is set to 1, the return value
+ * represents the x coordinate in which the cursor should be repositioned.
+ * if needs_coloring is set to 0, the return value is -1.
+ * 
+ */
 int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_coloring, int use_next)
 {
 
@@ -256,9 +285,6 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 		free(left_half);
 		free(right_half);
 
-		// this branch returns the cursor position,
-		// in order to make it easy for the caller
-		// to reposition the cursor
 		return len_left;
 	}
 	else
@@ -300,17 +326,47 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 	return -1;
 }
 
-void show_countdown(WINDOW *win, int n)
+/* clears the countdown label.
+ * if test_ended is set to 1, it notifies the user about it
+ * otherwise it just clears the string printed by show_countdown
+ */
+void clear_countdown(WINDOW *win, int test_ended)
 {
-	mvwprintw(win, 3, 2, "TIME LEFT: %ds", n);
+    curs_set(0);
+    int y, x;
+    getyx(win, y, x);
+
+    int W = getmaxx(win);
+
+    mvwhline(win, 3, 2, ' ', W - 3);
+
+    if (test_ended)
+        mvwprintw(win, 3, 2, "Time's up!");
+
+    wmove(win, y, x);
+    curs_set(1);
+    wrefresh(win);
 }
 
-void clear_countdown(WINDOW *win)
+/* prints the countdown label */
+void show_countdown(WINDOW *win)
 {
-	wmove(win, 3, 2);
-	clrtoeol();
+    curs_set(0);
+    int y, x;
+    getyx(win, y, x);
+
+    int W = getmaxx(win);
+    mvwhline(win, 3, 2, ' ', W - 3);
+    mvwprintw(win, 3, 2, "Test started (%d seconds)", TESTDURATION);
+
+    wmove(win, y, x);
+    curs_set(1);
+    wrefresh(win);
 }
 
+/* it redraws the entire UI whenever the player 
+ * resizes the terminal screen.
+ */
 void handle_resize(ui_t *ui, player_t *p)
 {	
 	static const int LINEY = 8;
@@ -354,6 +410,7 @@ void handle_resize(ui_t *ui, player_t *p)
 	wrefresh(ui->win);
 }
 
+/* resets the UI state and game state */
 void reset_ui(ui_t *ui, player_t *p)
 {
 	curs_set(0);
@@ -387,6 +444,7 @@ void reset_ui(ui_t *ui, player_t *p)
 	curs_set(1);
 }
 
+/* intialize ncurses environment */
 ui_t init_ui(player_t *p)
 {
 	curs_set(0);
@@ -397,17 +455,20 @@ ui_t init_ui(player_t *p)
 	return ui;
 }
 
+/* it initialize options for ncurses */
 void init_environment()
 {
 	initscr();
 	cbreak();
 	noecho();
+	set_escdelay(25);
 
 	if (has_colors())
 	{
 		start_color();
 		init_pair(1, COLOR_GREEN, COLOR_BLACK);
 	}
+	else exit(EXIT_FAILURE);
 
 }
 
@@ -421,24 +482,67 @@ int main()
 	
 	player_t p;
 	ui_t main_ui = init_ui(&p);
+	wtimeout(main_ui.win, 50);
+	keypad(main_ui.win, TRUE);
 
-	while (running)
+	struct timespec start, end;
+	int first_game = 0;
+
+	while (running_g)
 	{
+
+		if (countdown_active_g)
+		{
+			clock_gettime(CLOCK_MONOTONIC, &end);
+
+			double elapsed = (end.tv_sec - start.tv_sec)
+						   + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+			if (elapsed >= (double) TESTDURATION)
+			{
+				clear_countdown(main_ui.win, 1);
+				test_ended_g = 1;
+				curs_set(0);
+			}
+		}
 		
 	    int ch = wgetch(main_ui.win);
 	    switch (ch)
 	    {
+	    	case ERR:
+	    		break;
 	    
 	        case KEY_RESIZE:
 	            handle_resize(&main_ui, &p);
+	            if (countdown_active_g)
+	            	show_countdown(main_ui.win);
+
+	            	// if (first_game && test_ended_g) break;
 	            break;
 	
 	        // 9 is for TAB, resets the test
 	        case 9:
+	        	test_ended_g = 0;
+	        	curs_set(1);
+	        	if (countdown_active_g)
+	        	{
+	        		countdown_active_g = 0;
+	        		clear_countdown(main_ui.win, 0);
+	        	}
 	            reset_ui(&main_ui, &p);
 	            break;
 	
 	        default: {
+	        	if (first_game && test_ended_g) break;
+ 		       	if (!first_game) first_game = 1;
+				if (!countdown_active_g)
+				{
+					countdown_active_g = 1;
+					clock_gettime(CLOCK_MONOTONIC, &start);
+					show_countdown(main_ui.win);
+					test_ended_g = 0;
+				}
+	        	
 	            if (ch == ' ')
 	            {
 	                size_t wlen = strlen(p.curr[p.curr_correct_words]);
@@ -456,10 +560,12 @@ int main()
 	                        p.curr = p.next;
 	                        p.next = get_chunk();
 	                        handle_resize(&main_ui, &p);
+	                        if (countdown_active_g) show_countdown(main_ui.win);
 	                    }
 	                    else if (p.curr_correct_words % TESTLINELEN == 0)
 	                    {
 	                        handle_resize(&main_ui, &p);
+	                        if (countdown_active_g) show_countdown(main_ui.win);
 	                    }
 	                    else
 	                    {
@@ -489,6 +595,8 @@ int main()
 	            break;
 	        }
 	    }
+
+	    wrefresh(main_ui.win);
 	}
 	
 	
