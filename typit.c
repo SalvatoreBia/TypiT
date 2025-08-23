@@ -8,10 +8,6 @@
 #include <string.h>
 #include <signal.h>
 
-#ifndef REPOURL
-#define REPOURL      "[Source code: https://github.com/SalvatoreBia/TypiT.git]"
-#endif
-
 #ifndef TESTDURATION
 #define TESTDURATION 30
 #endif
@@ -26,6 +22,8 @@
 #define UITITLE      "<<< TypiT >>>"
 #define UISTOP       "[Ctrl+C to quit]"
 #define UITESTRESET  "[Tab to reset]"
+#define REPOURL      "[Source code: https://github.com/SalvatoreBia/TypiT.git]"
+
 
 // ==================== GLOBAL VARIABLES ===================
 
@@ -66,7 +64,7 @@ typedef struct
 // ==================== UTILITIES ==========================
 
 /* handler for ctrl+C shortcut (quits the application) */
-void int_handler(int sig)
+void int_handler(int sig __attribute__((unused)))
 {
 	endwin();
 	exit(42);
@@ -172,6 +170,23 @@ void free_chunk(char **list)
 
 // ==================== TYPING FUNCTIONS ===================
 
+/* initializes (or resets, equivalently) the stats of the game */
+void reset_stats(stats_t *s)
+{
+	s->wpm = 0;
+	s->accuracy = 0.0f;
+	s->total_key_pressed = s->correct_key_pressed = 0;
+}
+
+/* calculate the stats for the game */
+void calculate_stats(stats_t *s)
+{
+	s->wpm = (s->total_key_pressed / 5) * (60 / TESTDURATION);
+	s->accuracy = (float) s->correct_key_pressed / s->total_key_pressed;
+}
+
+// ==================== UI FUNCTIONS =======================
+
 /* prints a line of the typing test, containing the words to type.
  * it takes as input:
  * win  -> the ncurses window
@@ -244,7 +259,7 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 		tmp = right_half;
 
 		// copy the right half of the current word (from cursor onwards)
-		size_t len_curr_word = strlen(p->curr[line_start + offset]);
+		int len_curr_word = (int) strlen(p->curr[line_start + offset]);
 		if (p->curr_idx < len_curr_word) 
 		{
 			size_t rem = len_curr_word - p->curr_idx;
@@ -364,6 +379,32 @@ void show_countdown(WINDOW *win)
     wrefresh(win);
 }
 
+void show_stats(WINDOW *win, stats_t *s)
+{
+    int y, _x;
+    getmaxyx(win, y, _x);
+    (void) _x;
+
+    const int PAD = 8;
+    const int LINEY = y - 6;
+
+    int key_x = PAD + 20;
+
+    mvwprintw(win, LINEY,     PAD, "[Stats]");
+    mvwprintw(win, LINEY + 1, PAD, "WPM -> %d", s->wpm);
+    mvwprintw(win, LINEY + 2, PAD, "accuracy -> %.2f", s->accuracy);
+
+    mvwprintw(win, LINEY + 1, key_x, "key pressed -> ");
+    wattron(win, COLOR_PAIR(1));
+    wprintw(win, "%d", s->correct_key_pressed);
+    wattroff(win, COLOR_PAIR(1));
+    wprintw(win, " / ");
+    wattron(win, COLOR_PAIR(2));
+    wprintw(win, "%d", (s->total_key_pressed - s->correct_key_pressed));
+    wattroff(win, COLOR_PAIR(2));
+    wprintw(win, " / %d", s->total_key_pressed);
+}
+
 /* it redraws the entire UI whenever the player 
  * resizes the terminal screen.
  */
@@ -467,8 +508,14 @@ void init_environment()
 	{
 		start_color();
 		init_pair(1, COLOR_GREEN, COLOR_BLACK);
+		init_pair(2, COLOR_RED  , COLOR_BLACK);
 	}
-	else exit(EXIT_FAILURE);
+	else
+	{
+		delwin(stdscr);
+		printf("***ERROR: couldn't set colors for TypiT\n");
+		exit(EXIT_FAILURE);
+	}
 
 }
 
@@ -481,6 +528,9 @@ int main()
 	init_words_g();
 	
 	player_t p;
+	stats_t  s;
+	reset_stats(&s);
+	
 	ui_t main_ui = init_ui(&p);
 	wtimeout(main_ui.win, 50);
 	keypad(main_ui.win, TRUE);
@@ -503,6 +553,8 @@ int main()
 				clear_countdown(main_ui.win, 1);
 				test_ended_g = 1;
 				curs_set(0);
+				calculate_stats(&s);
+				show_stats(main_ui.win, &s);
 			}
 		}
 		
@@ -517,7 +569,9 @@ int main()
 	            if (countdown_active_g)
 	            	show_countdown(main_ui.win);
 
-	            	// if (first_game && test_ended_g) break;
+	            if (test_ended_g)
+	                    show_stats(main_ui.win, &s);
+
 	            break;
 	
 	        // 9 is for TAB, resets the test
@@ -529,6 +583,7 @@ int main()
 	        		countdown_active_g = 0;
 	        		clear_countdown(main_ui.win, 0);
 	        	}
+	        	reset_stats(&s);
 	            reset_ui(&main_ui, &p);
 	            break;
 	
@@ -545,13 +600,14 @@ int main()
 	        	
 	            if (ch == ' ')
 	            {
-	                size_t wlen = strlen(p.curr[p.curr_correct_words]);
+	                int wlen = (int) strlen(p.curr[p.curr_correct_words]);
 	
 	                if (p.curr_idx >= wlen)
 	                {
 	                    p.curr_idx = 0;
 	                    p.curr_correct_words++;
 	                    p.total_correct_words++;
+	                    s.correct_key_pressed++;
 	
 	                    if (p.curr_correct_words == WORDCHUNK)
 	                    {
@@ -590,8 +646,10 @@ int main()
 	
 	                    wmove(main_ui.win, y, x + 1);
 	                    p.curr_idx++;
+	                    s.correct_key_pressed++;
 	                }
 	            }
+	            s.total_key_pressed++;
 	            break;
 	        }
 	    }
