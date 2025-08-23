@@ -292,10 +292,10 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 		// here we are ready to print the left half 
 		// colored and the right half clean
 		wattron(win, COLOR_PAIR(1));
-		mvwprintw(win, y, x, left_half);
+		mvwprintw(win, y, x, "%s", left_half);
 		wattroff(win, COLOR_PAIR(1));
 
-		wprintw(win, right_half);
+		wprintw(win, "%s", right_half);
 
 		free(left_half);
 		free(right_half);
@@ -333,7 +333,7 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 
 		*tmp = '\0';
 
-		mvwprintw(win, y, x, line);
+		mvwprintw(win, y, x, "%s", line);
 		free(line);
 	}
 
