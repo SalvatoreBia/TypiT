@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include <locale.h>
 #include <time.h>
 #include <pthread.h>
 #include <ncurses.h>
@@ -9,31 +10,30 @@
 #include <signal.h>
 
 #ifndef TESTDURATION
-#define TESTDURATION 30
+#define TESTDURATION 5
 #endif
 
 #ifndef LISTPATH
-#define LISTPATH     "words.txt"
+#define LISTPATH "words.txt"
 #endif
 
-#define WORDCHUNK    45
-#define TESTLINELEN  15
-#define LINEMAXLEN   50
-#define UITITLE      "<<< TypiT >>>"
-#define UISTOP       "[Ctrl+C to quit]"
-#define UITESTRESET  "[Tab to reset]"
-#define REPOURL      "[Source code: https://github.com/SalvatoreBia/TypiT.git]"
-
+#define WORDCHUNK 45
+#define TESTLINELEN 15
+#define LINEMAXLEN 50
+#define UITITLE "<<< TypiT >>>"
+#define UISTOP "[Ctrl+C to quit]"
+#define UITESTRESET "[Tab to reset]"
+#define REPOURL "[Source code: https://github.com/SalvatoreBia/TypiT.git]"
 
 // ==================== GLOBAL VARIABLES ===================
 
 char **words_g;
-int  words_len_g;
+int words_len_g;
 
 static volatile int running_g = 1;
 
 static int countdown_active_g = 0;
-static int test_ended_g     = 1;
+static int test_ended_g = 1;
 
 // ==================== DATA STRUCTURES ====================
 
@@ -41,7 +41,7 @@ typedef struct
 {
 	int y, x;
 	WINDOW *win;
-}ui_t;
+} ui_t;
 
 typedef struct
 {
@@ -49,7 +49,7 @@ typedef struct
 	float accuracy;
 	int total_key_pressed;
 	int correct_key_pressed;
-}stats_t;
+} stats_t;
 
 typedef struct
 {
@@ -73,88 +73,88 @@ void int_handler(int sig __attribute__((unused)))
 /* returns the number of lines in a file */
 int fcount_lines(const char *filename)
 {
-    FILE *file = fopen(filename, "r");
-    if (!file)
-    {
-        perror("***Error trying to opening word list file!");
-        exit(EXIT_FAILURE);
-    }
-    char buf[LINEMAXLEN];
-    int count = 0;
-    while (fgets(buf, LINEMAXLEN, file))
-        count++;
-    fclose(file);
-    return count;
+	FILE *file = fopen(filename, "r");
+	if (!file)
+	{
+		perror("***Error trying to opening word list file!");
+		exit(EXIT_FAILURE);
+	}
+	char buf[LINEMAXLEN];
+	int count = 0;
+	while (fgets(buf, LINEMAXLEN, file))
+		count++;
+	fclose(file);
+	return count;
 }
 
 /* initialize the global list of words for the typer */
 void init_words_g(void)
 {
-    int lines = fcount_lines(LISTPATH);
-    words_len_g = lines;
+	int lines = fcount_lines(LISTPATH);
+	words_len_g = lines;
 
-    FILE *file = fopen(LISTPATH, "r");
-    if (!file)
-    {
-        perror("***ERROR: failed to open file!");
-        exit(EXIT_FAILURE);
-    }
+	FILE *file = fopen(LISTPATH, "r");
+	if (!file)
+	{
+		perror("***ERROR: failed to open file!");
+		exit(EXIT_FAILURE);
+	}
 
-    words_g = malloc(lines * sizeof(char *));
-    if (!words_g)
-    {
-        perror("***ERROR: failed to allocate words_g!");
-        fclose(file);
-        exit(EXIT_FAILURE);
-    }
+	words_g = malloc(lines * sizeof(char *));
+	if (!words_g)
+	{
+		perror("***ERROR: failed to allocate words_g!");
+		fclose(file);
+		exit(EXIT_FAILURE);
+	}
 
-    char buf[LINEMAXLEN];
-    int count = 0;
+	char buf[LINEMAXLEN];
+	int count = 0;
 
-    while (fgets(buf, LINEMAXLEN, file) && count < lines)
-    {
-        buf[strcspn(buf, "\n")] = '\0';
-        words_g[count] = malloc(strlen(buf) + 1);
-        if (!words_g[count])
-        {
-            perror("***ERROR: malloc failed while copying a word");
-            for (int i = 0; i < count; i++)
-                free(words_g[i]);
-            free(words_g);
-            fclose(file);
-            exit(EXIT_FAILURE);
-        }
-        strcpy(words_g[count], buf);
-        count++;
-    }
-    fclose(file);
+	while (fgets(buf, LINEMAXLEN, file) && count < lines)
+	{
+		buf[strcspn(buf, "\n")] = '\0';
+		words_g[count] = malloc(strlen(buf) + 1);
+		if (!words_g[count])
+		{
+			perror("***ERROR: malloc failed while copying a word");
+			for (int i = 0; i < count; i++)
+				free(words_g[i]);
+			free(words_g);
+			fclose(file);
+			exit(EXIT_FAILURE);
+		}
+		strcpy(words_g[count], buf);
+		count++;
+	}
+	fclose(file);
 }
 
 /* returns a list of words randomly chosen from the global list of words */
 char **get_chunk(void)
 {
-    char **chunk = (char **)malloc(WORDCHUNK * sizeof(char *));
-    if (!chunk)
-    {
-        perror("***ERROR: failed to allocate memory for word chunk!");
-        exit(EXIT_FAILURE);
-    }
-    for (int i = 0; i < WORDCHUNK; i++)
-    {
-        int random_idx = rand() % words_len_g;
-        const char *tmp = words_g[random_idx];
-        chunk[i] = (char *)malloc(strlen(tmp) + 1);
-        if (!chunk[i])
-        {
-            perror("***ERROR: malloc failed while populating word chunk!");
-            for (int j = 0; j < i; j++)
-                free(chunk[j]);
-            free(chunk);
-            exit(EXIT_FAILURE);
-        }
-        strcpy(chunk[i], tmp);
-    }
-    return chunk;
+	char **chunk = (char **)malloc(WORDCHUNK * sizeof(char *));
+	if (!chunk)
+	{
+		perror("***ERROR: failed to allocate memory for word chunk!");
+		exit(EXIT_FAILURE);
+	}
+	for (int i = 0; i < WORDCHUNK; i++)
+	{
+		int random_idx = rand() % words_len_g;
+		const char *tmp = words_g[random_idx];
+		chunk[i] = (char *)malloc(strlen(tmp) + 1);
+		if (!chunk[i])
+		{
+			perror("***ERROR: malloc failed while populating word chunk!");
+			for (int j = 0; j < i; j++)
+				free(chunk[j]);
+			free(chunk);
+			exit(EXIT_FAILURE);
+		}
+		strcpy(chunk[i], tmp);
+	}
+	return chunk;
 }
 
 /* frees a list of words */
@@ -163,7 +163,8 @@ void free_chunk(char **list)
 	if (!list) return;
 
 	for (int i = 0; i < WORDCHUNK; i++)
-		if (list[i]) free(list[i]);
+		if (list[i])
+			free(list[i]);
 
 	free(list);
 }
@@ -182,7 +183,7 @@ void reset_stats(stats_t *s)
 void calculate_stats(stats_t *s)
 {
 	s->wpm = (s->total_key_pressed / 5) * (60 / TESTDURATION);
-	s->accuracy = (float) s->correct_key_pressed / s->total_key_pressed;
+	s->accuracy = (float)s->correct_key_pressed / s->total_key_pressed;
 }
 
 // ==================== UI FUNCTIONS =======================
@@ -192,7 +193,7 @@ void calculate_stats(stats_t *s)
  * win  -> the ncurses window
  * p    -> the player
  * skip -> the index of the row to get from either p->curr or p->next
- *         (skip needs to be multiplied by TESTLINELEN in order to 
+ *         (skip needs to be multiplied by TESTLINELEN in order to
  *          get the actual index of the first word to take from them)
  * y, x -> the index of the window where to print the string
  * needs_coloring -> flag that indicates if the string needs to
@@ -202,7 +203,7 @@ void calculate_stats(stats_t *s)
  * it returns an integer: if needs_coloring is set to 1, the return value
  * represents the x coordinate in which the cursor should be repositioned.
  * if needs_coloring is set to 0, the return value is -1.
- * 
+ *
  */
 int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_coloring, int use_next)
 {
@@ -215,7 +216,7 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 		// we have to print the left section colored, the right section normal
 
 		// we need to calculate the total length of the left half,
-		// so we first count how many words are in the left half 
+		// so we first count how many words are in the left half
 		// BEFORE the current word
 		size_t len_left = 0;
 		size_t len_total = 0;
@@ -227,14 +228,14 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 			len_left += (i < offset) ? tmp_len + 1 : 0;
 			len_total += tmp_len + 1;
 		}
-		
+
 		// here we consider also the slice of the current word (up to cursor)
 		len_left += p->curr_idx;
 
 		// subtract 1 for the extra space included by the for
 		len_total--;
 
-		char *left_half = (char *) malloc(len_left + 1); // add 1 for string termination
+		char *left_half = (char *)malloc(len_left + 1); // add 1 for string termination
 		char *tmp = left_half;
 
 		// we now need to copy all of the strings to the left_half
@@ -255,12 +256,12 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 
 		// the next step is to do the same thing for the right half...
 		size_t len_right = len_total - len_left;
-		char *right_half = (char *) malloc(len_right + 1);
+		char *right_half = (char *)malloc(len_right + 1);
 		tmp = right_half;
 
 		// copy the right half of the current word (from cursor onwards)
-		int len_curr_word = (int) strlen(p->curr[line_start + offset]);
-		if (p->curr_idx < len_curr_word) 
+		int len_curr_word = (int)strlen(p->curr[line_start + offset]);
+		if (p->curr_idx < len_curr_word)
 		{
 			size_t rem = len_curr_word - p->curr_idx;
 			memcpy(tmp, p->curr[line_start + offset] + p->curr_idx, rem);
@@ -280,7 +281,7 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 			size_t wlen = strlen(p->curr[line_start + i]);
 			memcpy(tmp, p->curr[line_start + i], wlen);
 			tmp += wlen;
-			if (i != TESTLINELEN - 1) 
+			if (i != TESTLINELEN - 1)
 			{
 				*tmp = ' ';
 				tmp++;
@@ -289,7 +290,7 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 
 		*tmp = '\0';
 
-		// here we are ready to print the left half 
+		// here we are ready to print the left half
 		// colored and the right half clean
 		wattron(win, COLOR_PAIR(1));
 		mvwprintw(win, y, x, "%s", left_half);
@@ -304,7 +305,8 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 	}
 	else
 	{
-		if (use_next) skip = 0;
+		if (use_next)
+			skip = 0;
 		int line_start = skip * TESTLINELEN;
 		size_t len_total = 0;
 		for (int i = 0; i < TESTLINELEN; i++)
@@ -312,7 +314,7 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 
 		len_total--;
 
-		char *line = (char *) malloc(len_total + 1);
+		char *line = (char *)malloc(len_total + 1);
 		char *tmp = line;
 
 		for (int i = 0; i < TESTLINELEN; i++)
@@ -320,9 +322,8 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
 			size_t wlen = (use_next) ? strlen(p->next[line_start + i]) : strlen(p->curr[line_start + i]);
 			memcpy(
 				tmp,
-				(use_next) ? p->next[line_start + i] : p->curr[line_start + i], 
-				wlen
-			);
+				(use_next) ? p->next[line_start + i] : p->curr[line_start + i],
+				wlen);
 			tmp += wlen;
 			if (i != TESTLINELEN - 1)
 			{
@@ -347,69 +348,69 @@ int print_test_line(WINDOW *win, player_t *p, int skip, int y, int x, int needs_
  */
 void clear_countdown(WINDOW *win, int test_ended)
 {
-    curs_set(0);
-    int y, x;
-    getyx(win, y, x);
+	curs_set(0);
+	int y, x;
+	getyx(win, y, x);
 
-    int W = getmaxx(win);
+	int W = getmaxx(win);
 
-    mvwhline(win, 3, 2, ' ', W - 3);
+	mvwhline(win, 3, 2, ' ', W - 3);
 
-    if (test_ended)
-        mvwprintw(win, 3, 2, "Time's up!");
+	if (test_ended)
+		mvwprintw(win, 3, 2, "Time's up!");
 
-    wmove(win, y, x);
-    curs_set(1);
-    wrefresh(win);
+	wmove(win, y, x);
+	if (!test_ended) curs_set(0);
+	wrefresh(win);
 }
 
 /* prints the countdown label */
 void show_countdown(WINDOW *win)
 {
-    curs_set(0);
-    int y, x;
-    getyx(win, y, x);
+	curs_set(0);
+	int y, x;
+	getyx(win, y, x);
 
-    int W = getmaxx(win);
-    mvwhline(win, 3, 2, ' ', W - 3);
-    mvwprintw(win, 3, 2, "Test started (%d seconds)", TESTDURATION);
+	int W = getmaxx(win);
+	mvwhline(win, 3, 2, ' ', W - 3);
+	mvwprintw(win, 3, 2, "Test started (%d seconds)", TESTDURATION);
 
-    wmove(win, y, x);
-    curs_set(1);
-    wrefresh(win);
+	wmove(win, y, x);
+	curs_set(1);
+	wrefresh(win);
 }
 
 void show_stats(WINDOW *win, stats_t *s)
 {
-    int y, _x;
-    getmaxyx(win, y, _x);
-    (void) _x;
+	int y, _x;
+	getmaxyx(win, y, _x);
+	(void)_x;
 
-    const int PAD = 8;
-    const int LINEY = y - 6;
+	const int PAD = 8;
+	const int LINEY = y - 6;
 
-    int key_x = PAD + 20;
+	int key_x = PAD + 20;
 
-    mvwprintw(win, LINEY,     PAD, "[Stats]");
-    mvwprintw(win, LINEY + 1, PAD, "WPM -> %d", s->wpm);
-    mvwprintw(win, LINEY + 2, PAD, "accuracy -> %.2f", s->accuracy);
+	mvwprintw(win, LINEY, PAD, "[Stats]");
+	mvwprintw(win, LINEY + 1, PAD, "WPM -> %d", s->wpm);
+	mvwprintw(win, LINEY + 2, PAD, "accuracy -> %.2f", s->accuracy);
 
-    mvwprintw(win, LINEY + 1, key_x, "key pressed -> ");
-    wattron(win, COLOR_PAIR(1));
-    wprintw(win, "%d", s->correct_key_pressed);
-    wattroff(win, COLOR_PAIR(1));
-    wprintw(win, " / ");
-    wattron(win, COLOR_PAIR(2));
-    wprintw(win, "%d", (s->total_key_pressed - s->correct_key_pressed));
-    wattroff(win, COLOR_PAIR(2));
-    wprintw(win, " / %d", s->total_key_pressed);
+	mvwprintw(win, LINEY + 1, key_x, "key pressed -> ");
+	wattron(win, COLOR_PAIR(1));
+	wprintw(win, "%d", s->correct_key_pressed);
+	wattroff(win, COLOR_PAIR(1));
+	wprintw(win, " / ");
+	wattron(win, COLOR_PAIR(2));
+	wprintw(win, "%d", (s->total_key_pressed - s->correct_key_pressed));
+	wattroff(win, COLOR_PAIR(2));
+	wprintw(win, " / %d", s->total_key_pressed);
 }
 
-/* it redraws the entire UI whenever the player 
+/* it redraws the entire UI whenever the player
  * resizes the terminal screen.
  */
 void handle_resize(ui_t *ui, player_t *p)
-{	
+{
 	static const int LINEY = 8;
 	static const int LINEX = 8;
 
@@ -422,10 +423,10 @@ void handle_resize(ui_t *ui, player_t *p)
 	mvwin(ui->win, 1, 1);
 
 	werase(ui->win);
-	
+
 	// draw frame
 	box(ui->win, 0, 0);
-	mvwprintw(ui->win, 0, (((ui->x - 2) - strlen(UITITLE)) / 2), UITITLE);
+	mvwprintw(ui->win, 0, (((ui->x - 2) - strlen(UITITLE)) / 2), "%s", UITITLE);
 
 	// print current lines on the screen...
 	int start = p->curr_correct_words / TESTLINELEN;
@@ -434,15 +435,16 @@ void handle_resize(ui_t *ui, player_t *p)
 	// if the first line is the last row of the curr list
 	// the second line must be taken from the next list
 	int use_next = 0;
-	if (start + 1 == (WORDCHUNK / TESTLINELEN)) use_next = 1;
-	print_test_line(ui->win, p, start+1, LINEY+1, LINEX, 0, use_next);
+	if (start + 1 == (WORDCHUNK / TESTLINELEN))
+		use_next = 1;
+	print_test_line(ui->win, p, start + 1, LINEY + 1, LINEX, 0, use_next);
 
 	// print link and shortcuts on screen
-	int tab_start = (int) (strlen(UISTOP) + strlen(UITESTRESET));
-	int ctrlc_start = tab_start - ((int) strlen(UISTOP));
-	mvwprintw(ui->win, ui->y-2, ui->x-5 - tab_start, UITESTRESET);
-	mvwprintw(ui->win, ui->y-2, ui->x-5 - ctrlc_start, UISTOP);
-	mvwprintw(ui->win, ui->y-2, 2, REPOURL);
+	int tab_start = (int)(strlen(UISTOP) + strlen(UITESTRESET));
+	int ctrlc_start = tab_start - ((int)strlen(UISTOP));
+	mvwprintw(ui->win, ui->y - 2, ui->x - 5 - tab_start, "%s", UITESTRESET);
+	mvwprintw(ui->win, ui->y - 2, ui->x - 5 - ctrlc_start, "%s", UISTOP);
+	mvwprintw(ui->win, ui->y - 2, 2, "%s", REPOURL);
 
 	// move cursor to the current word index
 	wmove(ui->win, LINEY, LINEX + cursor_x);
@@ -455,14 +457,15 @@ void handle_resize(ui_t *ui, player_t *p)
 void reset_ui(ui_t *ui, player_t *p)
 {
 	curs_set(0);
-	
+
 	int row, col;
 	getmaxyx(stdscr, row, col);
 
 	ui->y = row - 2;
 	ui->x = col - 2;
 
-	if (ui->win) delwin(ui->win);
+	if (ui->win)
+		delwin(ui->win);
 	ui->win = newwin(ui->y, ui->x, 1, 1);
 	if (!ui->win)
 	{
@@ -470,15 +473,17 @@ void reset_ui(ui_t *ui, player_t *p)
 		exit(EXIT_FAILURE);
 	}
 
-	if (p->curr) free_chunk(p->curr);
-	if (p->next) free_chunk(p->next);
+	if (p->curr)
+		free_chunk(p->curr);
+	if (p->next)
+		free_chunk(p->next);
 
 	p->curr = get_chunk();
 	p->next = get_chunk();
-	
+
 	p->total_correct_words = 0;
-	p->curr_correct_words  = 0;
-	p->curr_idx            = 0;
+	p->curr_correct_words = 0;
+	p->curr_idx = 0;
 
 	handle_resize(ui, p);
 
@@ -492,23 +497,24 @@ ui_t init_ui(player_t *p)
 	ui_t ui;
 	reset_ui(&ui, p);
 	curs_set(1);
-	
+
 	return ui;
 }
 
 /* it initialize options for ncurses */
 void init_environment()
 {
+	setlocale(LC_ALL, "");
 	initscr();
 	cbreak();
 	noecho();
-	set_escdelay(25);
+	set_escdelay(0);
 
 	if (has_colors())
 	{
 		start_color();
 		init_pair(1, COLOR_GREEN, COLOR_BLACK);
-		init_pair(2, COLOR_RED  , COLOR_BLACK);
+		init_pair(2, COLOR_RED, COLOR_BLACK);
 	}
 	else
 	{
@@ -516,23 +522,22 @@ void init_environment()
 		printf("***ERROR: couldn't set colors for TypiT\n");
 		exit(EXIT_FAILURE);
 	}
-
 }
 
 int main()
 {
 	init_environment();
-	
+
 	srand(time(NULL));
 	signal(SIGINT, int_handler);
 	init_words_g();
-	
+
 	player_t p;
-	stats_t  s;
+	stats_t s;
 	reset_stats(&s);
-	
+
 	ui_t main_ui = init_ui(&p);
-	wtimeout(main_ui.win, 50);
+	wtimeout(main_ui.win, 30);
 	keypad(main_ui.win, TRUE);
 
 	struct timespec start, end;
@@ -545,119 +550,128 @@ int main()
 		{
 			clock_gettime(CLOCK_MONOTONIC, &end);
 
-			double elapsed = (end.tv_sec - start.tv_sec)
-						   + (end.tv_nsec - start.tv_nsec) / 1e9;
+			double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 
-			if (elapsed >= (double) TESTDURATION)
+			if (elapsed >= (double)TESTDURATION)
 			{
 				clear_countdown(main_ui.win, 1);
 				test_ended_g = 1;
+				countdown_active_g = 0;
 				curs_set(0);
 				calculate_stats(&s);
 				show_stats(main_ui.win, &s);
+				wtimeout(main_ui.win, 0);
 			}
 		}
-		
-	    int ch = wgetch(main_ui.win);
-	    switch (ch)
-	    {
-	    	case ERR:
-	    		break;
-	    
-	        case KEY_RESIZE:
-	            handle_resize(&main_ui, &p);
-	            if (countdown_active_g)
-	            	show_countdown(main_ui.win);
 
-	            if (test_ended_g)
-	                    show_stats(main_ui.win, &s);
+		int ch = wgetch(main_ui.win);
+		switch (ch)
+		{
+		case ERR:
+			break;
 
-	            break;
-	
-	        // 9 is for TAB, resets the test
-	        case 9:
-	        	test_ended_g = 0;
-	        	curs_set(1);
-	        	if (countdown_active_g)
-	        	{
-	        		countdown_active_g = 0;
-	        		clear_countdown(main_ui.win, 0);
-	        	}
-	        	reset_stats(&s);
-	            reset_ui(&main_ui, &p);
-	            break;
-	
-	        default: {
-	        	if (first_game && test_ended_g) break;
- 		       	if (!first_game) first_game = 1;
-				if (!countdown_active_g)
+		case KEY_RESIZE:
+			handle_resize(&main_ui, &p);
+			if (countdown_active_g)
+				show_countdown(main_ui.win);
+
+			if (test_ended_g)
+			{
+				clear_countdown(main_ui.win, 1);
+				show_stats(main_ui.win, &s);
+			}
+
+			break;
+
+		// 9 is for TAB, resets the test
+		case 9:
+			test_ended_g = 0;
+			curs_set(1);
+			if (countdown_active_g)
+			{
+				countdown_active_g = 0;
+				clear_countdown(main_ui.win, 0);
+			}
+			reset_stats(&s);
+			reset_ui(&main_ui, &p);
+			break;
+
+		default:
+		{
+			if (first_game && test_ended_g)
+				break;
+			if (!first_game)
+				first_game = 1;
+			if (!countdown_active_g)
+			{
+				countdown_active_g = 1;
+				clock_gettime(CLOCK_MONOTONIC, &start);
+				show_countdown(main_ui.win);
+				test_ended_g = 0;
+				wtimeout(main_ui.win, 30);
+			}
+
+			if (ch == ' ')
+			{
+				int wlen = (int)strlen(p.curr[p.curr_correct_words]);
+
+				if (p.curr_idx >= wlen)
 				{
-					countdown_active_g = 1;
-					clock_gettime(CLOCK_MONOTONIC, &start);
-					show_countdown(main_ui.win);
-					test_ended_g = 0;
-				}
-	        	
-	            if (ch == ' ')
-	            {
-	                int wlen = (int) strlen(p.curr[p.curr_correct_words]);
-	
-	                if (p.curr_idx >= wlen)
-	                {
-	                    p.curr_idx = 0;
-	                    p.curr_correct_words++;
-	                    p.total_correct_words++;
-	                    s.correct_key_pressed++;
-	
-	                    if (p.curr_correct_words == WORDCHUNK)
-	                    {
-	                        p.curr_correct_words = 0;
-	                        free_chunk(p.curr);
-	                        p.curr = p.next;
-	                        p.next = get_chunk();
-	                        handle_resize(&main_ui, &p);
-	                        if (countdown_active_g) show_countdown(main_ui.win);
-	                    }
-	                    else if (p.curr_correct_words % TESTLINELEN == 0)
-	                    {
-	                        handle_resize(&main_ui, &p);
-	                        if (countdown_active_g) show_countdown(main_ui.win);
-	                    }
-	                    else
-	                    {
-	                        int y, x;
-	                        getyx(main_ui.win, y, x);
-	                        wmove(main_ui.win, y, x + 1);
-	                    }
-	                }
-	            }
-	            else
-	            {
-	                char expected = p.curr[p.curr_correct_words][p.curr_idx];
-	
-	                if (ch == expected)
-	                {
-	                    int y, x;
-	                    getyx(main_ui.win, y, x);
-	
-	                    wattron(main_ui.win, COLOR_PAIR(1));
-	                    mvwaddch(main_ui.win, y, x, ch);
-	                    wattroff(main_ui.win, COLOR_PAIR(1));
-	
-	                    wmove(main_ui.win, y, x + 1);
-	                    p.curr_idx++;
-	                    s.correct_key_pressed++;
-	                }
-	            }
-	            s.total_key_pressed++;
-	            break;
-	        }
-	    }
+					p.curr_idx = 0;
+					p.curr_correct_words++;
+					p.total_correct_words++;
+					s.correct_key_pressed++;
 
-	    wrefresh(main_ui.win);
+					if (p.curr_correct_words == WORDCHUNK)
+					{
+						p.curr_correct_words = 0;
+						free_chunk(p.curr);
+						p.curr = p.next;
+						p.next = get_chunk();
+						handle_resize(&main_ui, &p);
+						if (countdown_active_g)
+							show_countdown(main_ui.win);
+					}
+					else if (p.curr_correct_words % TESTLINELEN == 0)
+					{
+						handle_resize(&main_ui, &p);
+						if (countdown_active_g)
+							show_countdown(main_ui.win);
+					}
+					else
+					{
+						int y, x;
+						getyx(main_ui.win, y, x);
+						wmove(main_ui.win, y, x + 1);
+					}
+				}
+			}
+			else
+			{
+				char expected = p.curr[p.curr_correct_words][p.curr_idx];
+
+				if (ch == expected)
+				{
+					int y, x;
+					getyx(main_ui.win, y, x);
+
+					wattron(main_ui.win, COLOR_PAIR(1));
+					mvwaddch(main_ui.win, y, x, ch);
+					wattroff(main_ui.win, COLOR_PAIR(1));
+
+					wmove(main_ui.win, y, x + 1);
+					p.curr_idx++;
+					s.correct_key_pressed++;
+				}
+			}
+			s.total_key_pressed++;
+			break;
+		}
+		}
+
+		wrefresh(main_ui.win);
 	}
-	
-	
+
 	endwin();
 	return 0;
 }
